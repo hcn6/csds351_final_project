@@ -4,7 +4,8 @@ import numpy as np
 import torch
 import csv
 # from final_project.database import db
-from preprocess import preprocess_string
+# from preprocess import preprocess_string
+from clean_text import twitter_clean_text as preprocess_string
 from transformers import AutoModelForSequenceClassification
 from transformers import AutoTokenizer
 import pprint

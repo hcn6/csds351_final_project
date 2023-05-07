@@ -206,6 +206,19 @@ def kafka_batch_analysis(texts, sentiment):
 
     return merged_company_score
 
+def mongodb_batch_sentiment(texts):
+    analysis = Analysis.init_sentiment_analysis()
+    print("Perform sentimental analysis")
+    scores = analysis.sentimental_anal(texts)
+    print(scores)
+    labels = analysis.get_label_for_task('sentiment')
+    print(labels)
+    # Print tweet along with its sentiment score
+    for i in range(len(scores)):
+      print(f"Tweet: {scores[i]}")
+      for j, score in enumerate(scores[i]):
+        print(f"{labels[j]}: {score}")
+    print("=====================================")
 
 if __name__ == "__main__":
     from transformers import pipeline
