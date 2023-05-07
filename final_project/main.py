@@ -1,4 +1,4 @@
-from final_project.analysis.analysis import Analysis
+from analysis.analysis import Analysis
 import json
 import logging
 import re
@@ -208,17 +208,21 @@ def kafka_batch_analysis(texts, sentiment):
 
 def mongodb_batch_sentiment(texts):
     analysis = Analysis.init_sentiment_analysis()
-    print("Perform sentimental analysis")
     scores = analysis.sentimental_anal(texts)
-    print(scores)
+    # print(scores)
     labels = analysis.get_label_for_task('sentiment')
-    print(labels)
     # Print tweet along with its sentiment score
+    all_scores = []
+
     for i in range(len(scores)):
+      score_dict = {}
       print(f"Tweet: {scores[i]}")
       for j, score in enumerate(scores[i]):
         print(f"{labels[j]}: {score}")
-    print("=====================================")
+        score_dict[labels[j]] = score
+      all_scores.append(score_dict)
+    
+    return all_scores
 
 if __name__ == "__main__":
     from transformers import pipeline
@@ -229,14 +233,8 @@ if __name__ == "__main__":
     output_collection = db.get_collection("reddit_sentiment_score")
 
     # Define the batch size
-    db_batch_size = 1000
-    model_batch_size = 16
-    # Load the sentiment analysis pipeline
-    sentiment_analyzer = pipeline("sentiment-analysis", 
-                                  model='cardiffnlp/twitter-roberta-base-sentiment-latest',
-                                  batch_size=model_batch_size,
-                                  max_length=512,
-                                  truncation=True)
+    db_batch_size = 16
+    # model_batch_size = 16
 
     # Get the IDs of the documents that have already been analyzed
     analyzed_ids = set(x["document_id"] for x in analysis_log.find())
@@ -253,12 +251,12 @@ if __name__ == "__main__":
 
         batch_docs.append(document)
         # Perform sentiment analysis on the text
-        if len(batch_docs) == model_batch_size or i == data_collection.count_documents({}) - 1:
+        if len(batch_docs) == db_batch_size or i == data_collection.count_documents({}) - 1:
             start = time.time()
             batch_texts = [doc["selftext"] for doc in batch_docs]
-            results = sentiment_analyzer(batch_texts)
+            results = mongodb_batch_sentiment(batch_texts)
 
-            print(f"Batch {model_batch_size} took {time.time() - start} seconds.")
+            print(f"Batch {db_batch_size} took {time.time() - start} seconds.")
 
             for result, document in zip(results, batch_docs):
                 # Add the sentiment analysis result to the document

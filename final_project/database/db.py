@@ -1,5 +1,5 @@
 from pymongo import MongoClient
-from final_project.utils import logging
+from utils import logging
 
 # MONGO_ENDPOINT = 'mongodb+srv://hieunguyen:Hieu1234@hieubase.r9ivh.gcp.mongodb.net'
 MONGO_ENDPOINT = 'localhost'
