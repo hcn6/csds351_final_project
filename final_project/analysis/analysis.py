@@ -3,7 +3,7 @@ import datasets
 import numpy as np
 import torch
 import csv
-from final_project.database import db
+# from final_project.database import db
 from final_project.clean_text.twitter_clean_text import preprocess_string
 from transformers import AutoModelForSequenceClassification
 from transformers import AutoTokenizer
