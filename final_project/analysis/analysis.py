@@ -3,12 +3,20 @@ import datasets
 import numpy as np
 import torch
 import csv
-import database.db as db
-import filter_spam
-from utils import logging
+from final_project.database import db
+from final_project.clean_text.twitter_clean_text import preprocess_string
+from transformers import AutoModelForSequenceClassification
+from transformers import AutoTokenizer
+import pprint
 
-class Anal:
-  def __init__(self, sentiment_tokenizer, emotion_tokenizer, spam_tokenizer, model_sentiment, model_emotion, model_spam):
+class Analysis:
+  def __init__(self, 
+               sentiment_tokenizer, 
+               emotion_tokenizer, 
+               spam_tokenizer, 
+               model_sentiment, 
+               model_emotion, 
+               model_spam,):
       self.sentiment_tokenizer = sentiment_tokenizer
       self.emotion_tokenizer = emotion_tokenizer
       self.spam_tokenizer = spam_tokenizer
@@ -18,134 +26,47 @@ class Anal:
       self.model_spam = model_spam
 
       self.MAX_LENGTH = 64
-      self.BATCH_SIZE = 16
+      self.BATCH_SIZE = 64
 
-  def filter_spam_tweet(self, tweets_dict):
-    return filter_spam.filter_spam(tweets_dict, self.spam_tokenizer, self.model_spam)
+      self.device = self.init_device()
+  
+  @classmethod
+  def init_sentiment_analysis(cls):
+    SENTIMENT = 'cardiffnlp/twitter-roberta-base-sentiment-latest'
+    EMOTION = 'cardiffnlp/twitter-roberta-base-emotion'
+    SPAM = "mrm8488/bert-tiny-finetuned-sms-spam-detection"
 
-  def analyze_tweets(self, tweets_dict, twitter_data):
-      q1 = time.time()
-      username = twitter_data['name']
-      
-      tweets_list = list(set(tweets_dict.keys()))
-      tweets_list = self.filter_spam_tweet({
-          'name': username,
-          'tweets': tweets_list
-      })
+    sentiment_tokenizer = AutoTokenizer.from_pretrained(SENTIMENT)
+    emotion_tokenizer = AutoTokenizer.from_pretrained(EMOTION)
+    spam_tokenizer = AutoTokenizer.from_pretrained(SPAM)
 
-      url = f"https://twitter.com/{twitter_data['username']}"
-      logging.info(f'Start analyzing sentiment for {username}')
+    model_sentiment = AutoModelForSequenceClassification.from_pretrained(SENTIMENT)
+    model_emotion = AutoModelForSequenceClassification.from_pretrained(EMOTION)
+    model_spam = AutoModelForSequenceClassification.from_pretrained(SPAM)
+    analysis = Analysis(sentiment_tokenizer=sentiment_tokenizer,
+                        emotion_tokenizer=emotion_tokenizer,
+                        spam_tokenizer=spam_tokenizer,
+                        model_sentiment=model_sentiment,
+                        model_emotion=model_emotion,
+                        model_spam=model_spam)
+    return analysis
 
-      scores = self.sentimental_anal({
-          'name': username,
-          'tweets': tweets_list
-      }, self.sentiment_tokenizer, self.model_sentiment)
-      q2 = time.time()
-      logging.info(f'Finish analyzing sentiment for {username} in {q2 - q1}')
+  def init_device(self):
+    if torch.cuda.is_available():
+      device = torch.device("cuda")
+    else:
+      device = torch.device("cpu")
+    return device
 
-      
-      avg_negative = np.mean(scores[:, 0])
-      std_negative = np.std(scores[:, 0])
-
-      avg_neutral = np.mean(scores[:, 1])
-      std_neutral = np.std(scores[:, 1])
-
-      avg_positive = np.mean(scores[:, 2])
-      std_positive = np.std(scores[:, 2])
-
-      norm_scores = (scores.dot(np.array([-1, 0, 1])) + 1) / 2
-
-      avg_norm = np.mean(norm_scores)
-      std_norm = np.std(norm_scores)
-
-      logging.info(f'Start analyzing emotion for {username}')
-
-      emotion_scores = self.emotion_anal({
-          'name': username,
-          'tweets': tweets_list
-      }, self.emotion_tokenizer, self.model_emotion)
-      q3 = time.time()
-      logging.info(f'Finish analyzing emotion for {username} in {q3 - q2}')
-      
-      data = []
-      
-      for tweet, sentiment, emotion in zip(tweets_list, scores, emotion_scores):
-        json = {
-          "tweet": tweet,
-          "sentiment": list(sentiment),
-          "emotion": list(emotion),
-          "collection": username,
-          "inserted_at": time.time() * 1000,
-          "url": url,
-          "created_at": tweets_dict[tweet]['created_at'],
-          "_id": tweets_dict[tweet]['id']
-        }
-        data.append(json)
-      
-      # data = [{k:v} for k, v in zip(tweets_list, scores) ]
-      try:
-        db.get_collection("tweets_score").insert_many(data, ordered=False)
-      except:
-        logging.warn("Just Duplicates")
-      
-      # scam_tweets = get_scam_tweet(tweets_list, scam_label)
-
-      avg_anger = np.mean(emotion_scores[:, 0])
-      std_anger = np.std(emotion_scores[:, 0])
-
-      avg_joy = np.mean(emotion_scores[:, 1])
-      std_joy = np.std(emotion_scores[:, 1])
-
-      avg_optimism = np.mean(emotion_scores[:, 2])
-      std_optimism = np.std(emotion_scores[:, 2])
-
-      avg_sadness = np.mean(emotion_scores[:, 3])
-      std_sadness = np.std(emotion_scores[:, 3])
-      
-      q4 = time.time()
-      logging.info(f'Finish analyzing all in {q4 - q1}')
-      return {
-          
-          'sent_avg_negative': avg_negative,
-          'sent_std_negative': std_negative,
-
-          'sent_avg_neutral': avg_neutral,
-          'sent_std_neutral': std_neutral,
-
-          'sent_avg_positive': avg_positive,
-          'sent_std_positive': std_positive,
-
-          'sent_avg_norm': avg_norm,
-          'sent_std_norm': std_norm,
-
-          'emo_avg_anger' : avg_anger,
-          'emo_std_anger' : std_anger,
-
-          'emo_avg_joy' : avg_joy ,
-          'emo_std_joy' : std_joy,
-
-          'emo_avg_optimism' : avg_optimism ,
-          'emo_std_optimism' : std_optimism,
-
-          'emo_avg_sadness' : avg_sadness ,
-          'emo_std_sadness' : std_sadness,
-      }
-
-  def emotion_anal(self, collection_dict, emotion_tokenizer, model_emotion):
-    tokenizer = emotion_tokenizer
-    model = model_emotion.to("cuda")
-    labels = self.get_label_for_task('emotion')
-    return self.cal_stat_for_collection_with_labels(tokenizer, collection_dict, labels, model)
-
-  def sentimental_anal(self, collection_dict, sentiment_tokenizer, model_sentiment):
-    tokenizer = sentiment_tokenizer
-    model = model_sentiment.to("cuda")
+  def sentimental_anal(self, tweets):
+    tokenizer = self.sentiment_tokenizer
+    model = self.model_sentiment.to(self.device)
     labels = self.get_label_for_task('sentiment')
-    return self.cal_stat_for_collection_with_labels(tokenizer, collection_dict, labels, model)
+    return self.cal_stat_for_collection_with_labels(tokenizer, tweets, model)
 
   def get_label_for_task(self, task):
     labels = []
-    mapping_link = f"mapping/{task}/mapping.txt"
+    mapping_link = f"analysis/mapping/{task}/mapping.txt"
     with open (mapping_link, 'r', encoding='utf-8') as f:
         html = f.read().split("\n")
         csvreader = csv.reader(html, delimiter='\t')
@@ -154,7 +75,7 @@ class Anal:
     return labels
 
   def preprocess_tweets(self, tweets):
-    tweets = [self.preprocess(tweet) for tweet in tweets]
+    tweets = [preprocess_string(tweet) for tweet in tweets]
     return tweets
 
   def convert_tweets_for_training(self, tokenizer, tweets):
@@ -163,8 +84,8 @@ class Anal:
     return encoded_input
 
   def generate_softmax_score(self, batch, model):
-    input_ids = torch.tensor(batch['input_ids']).to("cuda")
-    attention_mask = torch.tensor(batch['attention_mask']).to("cuda")
+    input_ids = torch.tensor(batch['input_ids']).to(self.device)
+    attention_mask = torch.tensor(batch['attention_mask']).to(self.device)
     output = model(input_ids=input_ids, attention_mask=attention_mask)
     
     softmax_layer = torch.nn.Softmax()
@@ -173,25 +94,94 @@ class Anal:
     batch['scores'] = scores
     return batch
 
-  def show_score_with_label(self, name, scores, labels):
-    output_str = name
-    for i in range(scores.shape[1]):
-      score_list = scores[:, i]
-      avg_score = np.mean(score_list)
-      std_score = np.std(score_list)
-
-      output_str += f"\n {labels[i]}: {avg_score} Std: {std_score}"
-    return scores
-
-
-  def cal_stat_for_collection_with_labels(self, tokenizer, collection, labels, model):
-    tweets = collection['tweets']
-    if not tweets:
-      return f"{collection['name']} has empty list of tweets"
+  def cal_stat_for_collection_with_labels(self, tokenizer, tweets, model):
     processed_tweets = self.convert_tweets_for_training(tokenizer, tweets)
 
     dataset_tweets = datasets.Dataset.from_dict(processed_tweets)
     result = dataset_tweets.map(lambda batch: self.generate_softmax_score(batch, model), batched=True, batch_size=self.BATCH_SIZE)
     result_scores = np.array(result['scores'])
   
-    return self.show_score_with_label(collection['name'], result_scores, labels)
+    return result_scores
+
+  def tweet_sentiment_and_insert_db(self, tweet_json):
+    tweets = [tweet['raw_text'] for tweet in tweet_json]
+
+    scores = self.sentimental_anal(tweets)
+    labels = self.get_label_for_task('sentiment')
+
+    data_to_insert = []
+    current_time = time.time()
+
+    for score, tweet_dict in zip(scores, tweet_json):
+      obj = {
+        **tweet_dict,
+        'inserted_at': current_time
+      }
+      for j, sub in enumerate(score):
+        obj[labels[j]] = sub
+      data_to_insert.append(obj)
+    
+    try:
+      db.get_collection('reddit_sentiment').insert_many(data_to_insert)
+      print(f"Successfully insert {len(data_to_insert)} tweet sentiment into db")
+    except Exception as e:
+      print(e)
+      print("Failed to insert tweet sentiment into db")
+
+  def tweet_sentiment(self, tweets):
+    scores = self.sentimental_anal(tweets)
+    labels = self.get_label_for_task('sentiment')
+
+    data_to_insert = []
+    current_time = time.time()
+
+    for score, tweet in zip(scores, tweets):
+      obj = {
+        "tweet": tweet,
+        'inserted_at': current_time
+      }
+      for j, sub in enumerate(score):
+        obj[labels[j]] = sub
+      data_to_insert.append(obj)
+    return data_to_insert
+
+if __name__ == "__main__":
+  analysis = Analysis.init_sentiment_analysis()
+  analysis.get_label_for_task('sentiment')
+#   print("Initiating model")
+#   collection = db.get_collection('reddit_raw_data')
+#   tweets = [obj['raw_text'] for obj in list(collection.find({}).limit(10))]
+#   SENTIMENT = 'cardiffnlp/twitter-roberta-base-sentiment-latest'
+#   EMOTION = 'cardiffnlp/twitter-roberta-base-emotion'
+#   SPAM = "mrm8488/bert-tiny-finetuned-sms-spam-detection"
+
+#   sentiment_tokenizer = AutoTokenizer.from_pretrained(SENTIMENT)
+#   emotion_tokenizer = AutoTokenizer.from_pretrained(EMOTION)
+#   spam_tokenizer = AutoTokenizer.from_pretrained(SPAM)
+
+#   model_sentiment = AutoModelForSequenceClassification.from_pretrained(SENTIMENT)
+#   model_emotion = AutoModelForSequenceClassification.from_pretrained(EMOTION)
+#   model_spam = AutoModelForSequenceClassification.from_pretrained(SPAM)
+#   analysis = Analysis(sentiment_tokenizer=sentiment_tokenizer,
+#                       emotion_tokenizer=emotion_tokenizer,
+#                       spam_tokenizer=spam_tokenizer,
+#                       model_sentiment=model_sentiment,
+#                       model_emotion=model_emotion,
+#                       model_spam=model_spam)
+
+#   print("Start analyzing")
+#   scores = analysis.sentimental_anal(tweets)
+#   # Use get_label_for_task to get the labels for each score
+#   labels = analysis.get_label_for_task('sentiment')
+#   print(labels)
+#   # Print tweet along with its sentiment score
+#   for i in range(len(tweets)):
+#     print(f"Tweet: {tweets[i]}")
+#     for j, score in enumerate(scores[i]):
+#       print(f"{labels[j]}: {score}")
+#     print("=====================================")
+
+
+
+
+  

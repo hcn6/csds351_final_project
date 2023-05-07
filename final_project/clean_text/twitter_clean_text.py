@@ -1,6 +1,5 @@
 import re
 
-
 def remove_special_tokens(data):
     data = str(data)
     emoj = re.compile("["
@@ -43,13 +42,7 @@ def remove_link_hash(text):
     return " ".join(new_text)
 
 
-# def remove_all_special_tokens(s):
-#     pattern = r'[^A-Za-z0-9]+'
-#     s = re.sub(pattern, '', s)
-#     return s
-
-
 def preprocess_string(string):
     string = remove_link_hash(string)
-    string = remove_emoji(string)
+    string = remove_special_tokens(string)
     return string

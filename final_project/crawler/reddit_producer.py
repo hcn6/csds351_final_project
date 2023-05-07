@@ -3,6 +3,10 @@ import re
 import sys
 from kafka import KafkaProducer
 from stream_reddit import RedditStream
+import json
+import time
+from datetime import datetime
+import pymongo
 
 def publish_message(producer_instance, topic_name, partition, key, value):
     try:
@@ -15,6 +19,22 @@ def publish_message(producer_instance, topic_name, partition, key, value):
     except Exception as ex:
         print('Exception in publishing message')
         print(str(ex))
+
+
+def process_reddit_object(comment):
+    return {
+        "comment_id": comment.id,
+        "raw_text": comment.body,
+        "created_at": comment.created_utc,
+        "permalink": comment.permalink,
+        "author_name": comment.author.name,
+        "author_id": comment.author.id,
+        "subreddit": comment.subreddit_name_prefixed
+    }
+
+
+def convert_json_object_to_string(json_object):
+    return json.dumps(json_object)
 
 
 def connect_kafka_producer():
@@ -44,34 +64,59 @@ def remove_emoji(comment):
     cleaned_comment = emoji_pattern.sub(r'', comment)
     return cleaned_comment
 
-stream = RedditStream('csMajors').get_stream_instance()
-kafka_producer = connect_kafka_producer()
+def json_serializer(data):
+    return json.dumps(data).encode('utf-8')
 
-print(kafka_producer)
-try:
-    for comment in stream.stream.comments():
-        publish_message(kafka_producer, 'reddit_raw_data', 1, 'raw_data', comment.body)
-    if kafka_producer is not None:
-        kafka_producer.close()
-except Exception as e:
-    print(e)
-# if len(sys.argv) >= 2:
-#     try:
-#         kafka_producer = connect_kafka_producer()
-#         r = praw.Reddit('bot1')
-#         num_comments_collected = 0
-#         # build stream. add first subreddit to start.
-#         subreddits = sys.argv[1]
-#         for sr in sys.argv[2:]:
-#             subreddits = subreddits + "+" + sr
-#         comment_stream = r.subreddit(subreddits)
-#         args_length = len(sys.argv)
-#         # for comment in comment_stream.stream.comments(skip_existing=True):
-#         for comment in comment_stream.stream.comments():
-#             publish_message(kafka_producer, 'reddit_news', int(sys.argv[args_length - 1]), 'news', remove_emoji(str(comment.body)))
-#         if kafka_producer is not None:
-#             kafka_producer.close()
-#     except Exception as e:
-#         print(e)
-# else:
-#     print("please enter subreddit.")
+def wait_until(next_time, cut_off_time=None):
+    current_time = datetime.now().timestamp()
+    if cut_off_time is not None :
+        current_time = cut_off_time
+
+    diff = next_time - current_time
+    print(diff)
+    if diff > 0:
+        time.sleep(int(diff // 60))
+
+
+if __name__ == "__main__":
+    # Connect to the MongoDB server
+    client = pymongo.MongoClient("mongodb+srv://colab:Hieu1234@hieubase.r9ivh.gcp.mongodb.net/?retryWrites=true&w=majority")
+
+    # Access a specific database
+    db = client["reddit_data"]
+
+    # Access a specific collection in the database
+    collection = db["reddit_comment_praw"]
+
+    # Let cut-off point be 1588291200 (May 1, 2020 12:00:00 AM GMT)
+    # From the cut-off point, looping through the database and send the data to Kafka
+    # periodically based on created_utc
+
+    cut_off_point = datetime(2022, 12, 21, 0, 0, 0).timestamp()
+    start_time = datetime(2023, 5, 3, 23, 11, 0).timestamp()
+
+    pipeline = [
+        {"$match": {"created_utc": {"$gt": cut_off_point}}},
+        {"$sort": {"created_utc": 1}}
+    ]
+
+    results = collection.aggregate(pipeline, allowDiskUse=True)
+
+    cur_time = cut_off_point
+
+    kafka_producer = connect_kafka_producer()
+
+    print(kafka_producer)
+
+    wait_until(start_time)
+
+    for doc in results:
+        posted_time = doc["created_utc"]
+        wait_until(posted_time, cur_time)
+        print(posted_time)
+        data = {
+            "message": doc["body"],
+            "created_utc": str(datetime.fromtimestamp(posted_time)),
+        }
+        publish_message(kafka_producer, 'reddit_posts',
+                            0, 'raw_data', convert_json_object_to_string(data))
