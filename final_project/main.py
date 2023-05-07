@@ -206,8 +206,7 @@ def kafka_batch_analysis(texts, sentiment):
 
     return merged_company_score
 
-def mongodb_batch_sentiment(texts):
-    analysis = Analysis.init_sentiment_analysis()
+def mongodb_batch_sentiment(analysis, texts):
     scores = analysis.sentimental_anal(texts)
     # print(scores)
     labels = analysis.get_label_for_task('sentiment')
@@ -216,9 +215,9 @@ def mongodb_batch_sentiment(texts):
 
     for i in range(len(scores)):
       score_dict = {}
-      print(f"Tweet: {scores[i]}")
+      # print(f"Tweet: {scores[i]}")
       for j, score in enumerate(scores[i]):
-        print(f"{labels[j]}: {score}")
+        # print(f"{labels[j]}: {score}")
         score_dict[labels[j]] = score
       all_scores.append(score_dict)
     
@@ -233,12 +232,12 @@ if __name__ == "__main__":
     output_collection = db.get_collection("reddit_sentiment_score")
 
     # Define the batch size
-    db_batch_size = 16
+    db_batch_size = 1000
     # model_batch_size = 16
 
     # Get the IDs of the documents that have already been analyzed
     analyzed_ids = set(x["document_id"] for x in analysis_log.find())
-    
+    analysis = Analysis.init_sentiment_analysis()
     batch_docs = []
 
     print("Starting sentiment analysis...")
@@ -254,7 +253,7 @@ if __name__ == "__main__":
         if len(batch_docs) == db_batch_size or i == data_collection.count_documents({}) - 1:
             start = time.time()
             batch_texts = [doc["selftext"] for doc in batch_docs]
-            results = mongodb_batch_sentiment(batch_texts)
+            results = mongodb_batch_sentiment(analysis, batch_texts)
 
             print(f"Batch {db_batch_size} took {time.time() - start} seconds.")
 
@@ -263,6 +262,7 @@ if __name__ == "__main__":
                 output_collection.insert_one({"_id": document["_id"], "sentiment": result, "text": document["selftext"]})
                 # Log the analysis in the analysis log collection
                 analysis_log.insert_one({"document_id": document["_id"], "sentiment": result})
+            batch_docs.clear()
         # If the batch size has been reached, print a status update and sleep for a bit
         if i % db_batch_size == 0 and i > 0:
             print(f"Processed {i} documents.")

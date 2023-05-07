@@ -1,5 +1,5 @@
 from pymongo import MongoClient
-from utils import logging
+from final_project.utils import logging
 
 # MONGO_ENDPOINT = 'mongodb+srv://hieunguyen:Hieu1234@hieubase.r9ivh.gcp.mongodb.net'
 MONGO_ENDPOINT = 'localhost'
@@ -33,7 +33,8 @@ if __name__ == '__main__':
         count += 1
         if count % 10000 == 0:
             logging.info(f"Finish upload {count} comments")
-        dest_collection.insert_one(document)
+        if dest_collection.find_one(document) is None:
+            dest_collection.insert_one(document)
 
     # Drop the source collection (optional)
     # source_collection.drop()
