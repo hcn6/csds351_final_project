@@ -17,17 +17,28 @@ def get_collection(collection_name, db_name=DATABASE_NAME):
     collection = current_db[collection_name]
     return collection
 
+def get_db_by_url(url, db_name, port=MONGO_PORT):
+    current_client = MongoClient(url, port)
+    current_db = current_client[db_name]
+    return current_db
+
+def get_collection_by_url(url, db_name, collection_name, port=MONGO_PORT):
+    current_client = MongoClient(url, port)
+    current_db = current_client[db_name]
+    collection = current_db[collection_name]
+    return collection
+
 if __name__ == '__main__':
     from pymongo import MongoClient
 
     # Connect to the source and destination databases
-    source_client = MongoClient('mongodb://localhost:27017/')
+    source_client = MongoClient('mongodb+srv://dxn183:NBq4c7oQaFm7kaOD@cluster1.ylkmwu2.mongodb.net/')
     source_db = source_client['reddit_data']
-    source_collection = source_db['reddit_comment_praw']
+    source_collection = source_db['reddit_comment_sentiment_score']
 
-    dest_client = MongoClient('mongodb+srv://dxn183:NBq4c7oQaFm7kaOD@cluster1.ylkmwu2.mongodb.net/')
+    dest_client = MongoClient('mongodb+srv://dxn183:P4TnUn0wuNZqztQx@cluster0.7tqovhs.mongodb.net/')
     dest_db = dest_client['reddit_data']
-    dest_collection = dest_db['reddit_comment_praw']
+    dest_collection = dest_db['reddit_comment_sentiment_score']
 
     # Loop over the documents in the source collection and insert them into the destination collection
     count = 0
@@ -35,14 +46,14 @@ if __name__ == '__main__':
 
     batch_docs = []
     # batch_size = 2000
-    query = {"created_utc": {"$lt": 1659312000}, "author": {"$ne": "AutoModerator"}}
-
+    # query = {"created_utc": {"$lt": 1659312000}, "author": {"$ne": "AutoModerator"}}
+    query = {}
     all_data = list(source_collection.find(query))
 
-    for data in all_data:
-        data.pop('body_html', None)
+    # for data in all_data:
+    #     data.pop('body_html', None)
 
-    chunk_size = 2000
+    chunk_size = 10000
     chunks = []
     for i in range(0, len(all_data), chunk_size):
         chunk = all_data[i:i+chunk_size]
