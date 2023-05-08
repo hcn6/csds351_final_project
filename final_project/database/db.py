@@ -1,5 +1,6 @@
 from pymongo import MongoClient
-from final_project.utils import logging
+from utils import logging
+from tqdm import tqdm
 
 # MONGO_ENDPOINT = 'mongodb+srv://hieunguyen:Hieu1234@hieubase.r9ivh.gcp.mongodb.net'
 MONGO_ENDPOINT = 'localhost'
@@ -29,13 +30,35 @@ if __name__ == '__main__':
 
     # Loop over the documents in the source collection and insert them into the destination collection
     count = 0
-    for document in source_collection.find():
-        count += 1
+    inserted = set(x['_id'] for x in dest_collection.find())
+
+    batch_docs = []
+    batch_size = 1000
+
+    all_data = list(source_collection.find())
+
+    chunk_size = 1000
+    chunks = []
+    for i in range(0, len(all_data), chunk_size):
+        chunk = all_data[i:i+chunk_size]
+        chunks.append(chunk)
+
+    pbar = tqdm(total=len(chunks))
+    for chunk in chunks:
+        count += len(chunk)
         if count % 10000 == 0:
             logging.info(f"Finish upload {count} comments")
-        if dest_collection.find_one(document) is None:
-            dest_collection.insert_one(document)
+        
+        # if document['_id'] not in inserted:
+        #     batch_docs.append(document)
 
+        # if len(batch_docs) == batch_size or count == source_collection.count_documents({}) - 1:
+        #     dest_collection.insert_many(batch_docs)
+        #     batch_docs.clear()
+        
+        dest_collection.insert_many(chunk)
+        pbar.update(1)
+    pbar.close()
     # Drop the source collection (optional)
     # source_collection.drop()
 
