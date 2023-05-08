@@ -1,3 +1,4 @@
+import pymongo
 from analysis.analysis import Analysis
 import json
 import logging
@@ -161,12 +162,14 @@ def sentiment_layer(sentiment, comments):
     sentiment.tweet_sentiment_and_insert_db(comments)
 # def mapping_sentiment_to_company(sentiments, companies):
 
+
 def merge_dict_keys(sets):
     merged_set = sets[0]
-    
+
     for d in sets:
         merged_set = merged_set.union(d)
     return merged_set
+
 
 def average_sentiment_score(list_of_dicts):
     averages_dict = defaultdict(float)
@@ -181,6 +184,7 @@ def average_sentiment_score(list_of_dicts):
         averages_dict[key] = value / count_dict[key]
 
     return averages_dict
+
 
 def kafka_batch_analysis(texts, sentiment):
     results = sentiment.tweet_sentiment(texts)
@@ -199,12 +203,13 @@ def kafka_batch_analysis(texts, sentiment):
                 "neutral": result["neutral"]
             }
             merged_company_dict[company].append(score)
-    
+
     merged_company_score = {}
     for key, value in merged_company_dict.items():
         merged_company_score[key] = average_sentiment_score(value)
 
     return merged_company_score
+
 
 def mongodb_batch_sentiment(analysis, texts):
     scores = analysis.sentimental_anal(texts)
@@ -214,84 +219,128 @@ def mongodb_batch_sentiment(analysis, texts):
     all_scores = []
 
     for i in range(len(scores)):
-      score_dict = {}
-      # print(f"Tweet: {scores[i]}")
-      for j, score in enumerate(scores[i]):
-        # print(f"{labels[j]}: {score}")
-        score_dict[labels[j]] = score
-      all_scores.append(score_dict)
-    
+        score_dict = {}
+        # print(f"Tweet: {scores[i]}")
+        for j, score in enumerate(scores[i]):
+            # print(f"{labels[j]}: {score}")
+            score_dict[labels[j]] = score
+        all_scores.append(score_dict)
+
     return all_scores
- 
+
+
+def get_sentiment_by_organization(texts, sentiment_scores, get_organizations_fn):
+    org_sentiments = defaultdict(lambda: defaultdict(int))
+    org_counts = defaultdict(int)
+
+    for i, text in enumerate(texts):
+        organizations = get_organizations_fn(text)
+        sentiment = sentiment_scores[i]
+        for org in organizations:
+            org_sentiments[org]['positive'] += sentiment['positive']
+            org_sentiments[org]['negative'] += sentiment['negative']
+            org_sentiments[org]['neutral'] += sentiment['neutral']
+            org_counts[org] += 1
+
+    avg_sentiments = {}
+    for org, sentiment_totals in org_sentiments.items():
+        avg_sentiments[org] = {
+            'positive': sentiment_totals['positive'] / org_counts[org],
+            'negative': sentiment_totals['negative'] / org_counts[org],
+            'neutral': sentiment_totals['neutral'] / org_counts[org]
+        }
+
+    return avg_sentiments
+
+
+
 if __name__ == "__main__":
-    from transformers import pipeline
     comment_db_url = "mongodb+srv://dxn183:NBq4c7oQaFm7kaOD@cluster1.ylkmwu2.mongodb.net/"
     post_db_url = "mongodb+srv://colab:Hieu1234@hieubase.r9ivh.gcp.mongodb.net/?retryWrites=true&w=majority"
     comment_output_url = "mongodb+srv://dxn183:P4TnUn0wuNZqztQx@cluster0.7tqovhs.mongodb.net/"
 
-    print("Loading sentiment analysis pipeline...")
-    # Connect to MongoDB
-    data_collection = db.get_collection_by_url(url=comment_db_url, db_name="reddit_data", collection_name="reddit_comment_praw")
-    analysis_log = db.get_collection_by_url(url=comment_output_url , db_name="reddit_data", collection_name="reddit_comment_sentiment_analysis_log")
-    output_collection = db.get_collection_by_url(url=comment_output_url, db_name="reddit_data", collection_name="reddit_comment_sentiment_score")
+    from datetime import datetime, timedelta
 
-    # Define the batch size
-    db_batch_size = 10000
-    # model_batch_size = 16
+    collection = db.get_collection_by_url(url=comment_output_url, db_name="reddit_data", collection_name="interval_sentiment_1_day")
 
-    # Get the IDs of the documents that have already been analyzed
-    analyzed_ids = set(x["document_id"] for x in analysis_log.find())
-    analysis = Analysis.init_sentiment_analysis()
-    # batch_docs = []
+    epoch_seconds = 1659312000  # Replace with your specific date in epoch seconds format
+    start_time = datetime.utcfromtimestamp(epoch_seconds) - timedelta(days=1)
+    end_time = datetime.utcfromtimestamp(epoch_seconds)
 
-    print("Starting sentiment analysis...")
+    query = {
+        'timestamp': {
+            '$gte': start_time,
+            '$lt': end_time
+        }
+    }
 
-    time_out_duration = 7200000
-    data_cursor = list(data_collection.find(max_time_ms=time_out_duration))
+    results = collection.find(query)
+
     
-    print("Accumulate texts...")
-    data_cursor = [d for d in data_cursor if d.get('_id') not in analyzed_ids]
-    print("Total {} documents".format(len(data_cursor)))
-    
-    
-    chunk_size = db_batch_size
-    chunks = []
-    for i in range(0, len(data_cursor), chunk_size):
-        chunk = data_cursor[i:i+chunk_size]
-        chunks.append(chunk)
-    # Iterate over the collection using a cursor
-    # for i, document in enumerate(data_cursor):
-    for i, batch_docs in enumerate(chunks):
-        # Check if the document has already been analyzed
-        # if document["_id"] in analyzed_ids \
-        # or document["author"] == "AutoModerator":
-        #     continue
-        print(f"{i}. Getting chunk...")
-        # batch_docs.append(document)
-        start = time.time()
-        # Perform sentiment analysis on the text
-        if len(batch_docs) == db_batch_size or i == data_collection.count_documents({}) - 1:
-            print("Analyzing sentiment...")
-            batch_texts = [doc["body"] for doc in batch_docs]
-            results = mongodb_batch_sentiment(analysis, batch_texts)
-            print(f"Finish analysis on {i} in {time.time() - start}")
-            outputs = []
-            logs = []
-            for result, document in zip(results, batch_docs):
-                # Add the sentiment analysis result to the document
-                outputs.append({"_id": document["_id"], "sentiment": result, "text": document["body"]})
-                # Log the analysis in the analysis log collection
-                logs.append({"document_id": document["_id"], "sentiment": result})
-            
-            output_collection.insert_many(outputs)
-            analysis_log.insert_many(logs)
-            # batch_docs.clear()
 
-        # If the batch size has been reached, print a status update and sleep for a bit
-        # if i % db_batch_size == 0 and i > 0:
-        print(f"Processed {i * db_batch_size} documents.")
-        print(f"Batch {i} took {time.time() - start} seconds.")
-        time.sleep(5)
+    # print("Loading sentiment analysis pipeline...")
+    # # Connect to MongoDB
+    # data_collection = db.get_collection_by_url(url=comment_db_url, db_name="reddit_data", collection_name="reddit_comment_praw")
+    # analysis_log = db.get_collection_by_url(url=comment_output_url , db_name="reddit_data", collection_name="reddit_comment_sentiment_analysis_log")
+    # output_collection = db.get_collection_by_url(url=comment_output_url, db_name="reddit_data", collection_name="reddit_comment_sentiment_score")
+
+    # # Define the batch size
+    # db_batch_size = 10000
+    # # model_batch_size = 16
+
+    # # Get the IDs of the documents that have already been analyzed
+    # analyzed_ids = set(x["document_id"] for x in analysis_log.find())
+    # analysis = Analysis.init_sentiment_analysis()
+    # # batch_docs = []
+
+    # print("Starting sentiment analysis...")
+
+    # time_out_duration = 7200000
+    # data_cursor = list(data_collection.find(max_time_ms=time_out_duration))
+
+    # print("Accumulate texts...")
+    # data_cursor = [d for d in data_cursor if d.get('_id') not in analyzed_ids]
+    # print("Total {} documents".format(len(data_cursor)))
+
+    # chunk_size = db_batch_size
+    # chunks = []
+    # for i in range(0, len(data_cursor), chunk_size):
+    #     chunk = data_cursor[i:i+chunk_size]
+    #     chunks.append(chunk)
+    # # Iterate over the collection using a cursor
+    # # for i, document in enumerate(data_cursor):
+    # for i, batch_docs in enumerate(chunks):
+    #     # Check if the document has already been analyzed
+    #     # if document["_id"] in analyzed_ids \
+    #     # or document["author"] == "AutoModerator":
+    #     #     continue
+    #     print(f"{i}. Getting chunk...")
+    #     # batch_docs.append(document)
+    #     start = time.time()
+    #     # Perform sentiment analysis on the text
+    #     if len(batch_docs) == db_batch_size or i == data_collection.count_documents({}) - 1:
+    #         print("Analyzing sentiment...")
+    #         batch_texts = [doc["body"] for doc in batch_docs]
+    #         results = mongodb_batch_sentiment(analysis, batch_texts)
+    #         print(f"Finish analysis on {i} in {time.time() - start}")
+    #         outputs = []
+    #         logs = []
+    #         for result, document in zip(results, batch_docs):
+    #             # Add the sentiment analysis result to the document
+    #             outputs.append({"_id": document["_id"], "sentiment": result, "text": document["body"]})
+    #             # Log the analysis in the analysis log collection
+    #             logs.append({"document_id": document["_id"], "sentiment": result})
+
+    #         output_collection.insert_many(outputs)
+    #         analysis_log.insert_many(logs)
+    #         # batch_docs.clear()
+
+    #     # If the batch size has been reached, print a status update and sleep for a bit
+    #     # if i % db_batch_size == 0 and i > 0:
+    #     print(f"Processed {i * db_batch_size} documents.")
+    #     print(f"Batch {i} took {time.time() - start} seconds.")
+    #     time.sleep(5)
+
 
 # 01-08-2022 -> past
 # read by hours -> output to json, with timestamp as key
