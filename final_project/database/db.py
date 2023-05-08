@@ -1,9 +1,10 @@
 from pymongo import MongoClient
-from utils import logging
+from final_project.utils import logging
 from tqdm import tqdm
 
 # MONGO_ENDPOINT = 'mongodb+srv://hieunguyen:Hieu1234@hieubase.r9ivh.gcp.mongodb.net'
-MONGO_ENDPOINT = 'localhost'
+# MONGO_ENDPOINT = 'localhost'
+MONGO_ENDPOINT = 'mongodb+srv://dxn183:NBq4c7oQaFm7kaOD@cluster1.ylkmwu2.mongodb.net/'
 MONGO_PORT = 27017
 
 DATABASE_NAME = 'reddit_data'
@@ -24,7 +25,7 @@ if __name__ == '__main__':
     source_db = source_client['reddit_data']
     source_collection = source_db['reddit_comment_praw']
 
-    dest_client = MongoClient('mongodb+srv://colab:Hieu1234@hieubase.r9ivh.gcp.mongodb.net/?retryWrites=true&w=majority')
+    dest_client = MongoClient('mongodb+srv://dxn183:NBq4c7oQaFm7kaOD@cluster1.ylkmwu2.mongodb.net/')
     dest_db = dest_client['reddit_data']
     dest_collection = dest_db['reddit_comment_praw']
 
@@ -33,11 +34,15 @@ if __name__ == '__main__':
     inserted = set(x['_id'] for x in dest_collection.find())
 
     batch_docs = []
-    batch_size = 1000
+    # batch_size = 2000
+    query = {"created_utc": {"$lt": 1659312000}, "author": {"$ne": "AutoModerator"}}
 
-    all_data = list(source_collection.find())
+    all_data = list(source_collection.find(query))
 
-    chunk_size = 1000
+    for data in all_data:
+        data.pop('body_html', None)
+
+    chunk_size = 2000
     chunks = []
     for i in range(0, len(all_data), chunk_size):
         chunk = all_data[i:i+chunk_size]

@@ -222,17 +222,17 @@ def mongodb_batch_sentiment(analysis, texts):
       all_scores.append(score_dict)
     
     return all_scores
-
+ 
 if __name__ == "__main__":
     from transformers import pipeline
     print("Loading sentiment analysis pipeline...")
     # Connect to MongoDB
-    data_collection = db.get_collection("reddit_post")
-    analysis_log = db.get_collection("reddit_sentiment_analysis_log")
-    output_collection = db.get_collection("reddit_sentiment_score")
+    data_collection = db.get_collection("reddit_comment_praw")
+    analysis_log = db.get_collection("reddit_comment_sentiment_analysis_log")
+    output_collection = db.get_collection("reddit_comment_sentiment_score")
 
     # Define the batch size
-    db_batch_size = 1000
+    db_batch_size = 3000
     # model_batch_size = 16
 
     # Get the IDs of the documents that have already been analyzed
@@ -242,30 +242,38 @@ if __name__ == "__main__":
 
     print("Starting sentiment analysis...")
 
+    time_out_duration = 7200000
+    data_cursor = data_collection.find(max_time_ms=time_out_duration)
     # Iterate over the collection using a cursor
-    for i, document in enumerate(data_collection.find()):
+    for i, document in enumerate(data_cursor):
         # Check if the document has already been analyzed
-        if document["_id"] in analyzed_ids:
+        if document["_id"] in analyzed_ids \
+        or document["author"] == "AutoModerator":
             continue
 
         batch_docs.append(document)
+        start = time.time()
         # Perform sentiment analysis on the text
         if len(batch_docs) == db_batch_size or i == data_collection.count_documents({}) - 1:
-            start = time.time()
-            batch_texts = [doc["selftext"] for doc in batch_docs]
+            batch_texts = [doc["body"] for doc in batch_docs]
             results = mongodb_batch_sentiment(analysis, batch_texts)
-
-            print(f"Batch {db_batch_size} took {time.time() - start} seconds.")
-
+            print(f"Finish analysis on {i} in {time.time() - start}")
+            outputs = []
+            logs = []
             for result, document in zip(results, batch_docs):
                 # Add the sentiment analysis result to the document
-                output_collection.insert_one({"_id": document["_id"], "sentiment": result, "text": document["selftext"]})
+                outputs.append({"_id": document["_id"], "sentiment": result, "text": document["body"]})
                 # Log the analysis in the analysis log collection
-                analysis_log.insert_one({"document_id": document["_id"], "sentiment": result})
+                logs.append({"document_id": document["_id"], "sentiment": result})
+            
+            output_collection.insert_many(outputs)
+            analysis_log.insert_many(logs)
             batch_docs.clear()
+
         # If the batch size has been reached, print a status update and sleep for a bit
         if i % db_batch_size == 0 and i > 0:
             print(f"Processed {i} documents.")
+            print(f"Batch {db_batch_size} took {time.time() - start} seconds.")
             time.sleep(5)
 
 # 01-08-2022 -> past
