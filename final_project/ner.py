@@ -1,4 +1,11 @@
 import spacy
+from thinc.api import set_gpu_allocator, require_gpu
+
+# Use the GPU, with memory allocations directed via PyTorch.
+# This prevents out-of-memory errors that would otherwise occur from competing
+# memory pools.
+set_gpu_allocator("pytorch")
+require_gpu(0)
 
 # load the model and specify the device ID of the GPU to use
 nlp = spacy.load('en_core_web_trf', exclude=['parser', 'tagger', 'lemmatizer'])
