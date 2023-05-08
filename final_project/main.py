@@ -14,6 +14,8 @@ from database import db
 import nltk
 import ner
 from collections import defaultdict
+from datetime import datetime, timedelta
+from tqdm import tqdm
 nltk.download('punkt')
 nltk.download('stopwords')
 
@@ -233,6 +235,8 @@ def get_sentiment_by_organization(texts, sentiment_scores, get_organizations_fn)
     org_sentiments = defaultdict(lambda: defaultdict(int))
     org_counts = defaultdict(int)
 
+    pbar = tqdm(total=len(texts))
+
     for i, text in enumerate(texts):
         organizations = get_organizations_fn(text)
         sentiment = sentiment_scores[i]
@@ -241,17 +245,48 @@ def get_sentiment_by_organization(texts, sentiment_scores, get_organizations_fn)
             org_sentiments[org]['negative'] += sentiment['negative']
             org_sentiments[org]['neutral'] += sentiment['neutral']
             org_counts[org] += 1
+        pbar.update(1)
+    pbar.close()
 
     avg_sentiments = {}
     for org, sentiment_totals in org_sentiments.items():
         avg_sentiments[org] = {
+            'company': org,
             'positive': sentiment_totals['positive'] / org_counts[org],
             'negative': sentiment_totals['negative'] / org_counts[org],
-            'neutral': sentiment_totals['neutral'] / org_counts[org]
+            'neutral': sentiment_totals['neutral'] / org_counts[org],
+            'count': org_counts[org]
         }
 
     return avg_sentiments
 
+
+def query_collections_join_by_id(query, text_col_url, sentiment_col_url):
+    text_col = db.get_collection_by_url(url=text_col_url,
+                                        db_name="reddit_data",
+                                        collection_name="reddit_post")  # Replace with your first collection name
+    sentiment_col = db.get_collection_by_url(url=sentiment_col_url,
+                                             db_name="reddit_data",
+                                             collection_name="reddit_sentiment_score")  # Replace with your second collection name
+
+    text_project = {'created_utc': 1}
+    text_data = list(text_col.find(query, projection=text_project))
+
+    print(len(text_data))
+    id_list = [doc['_id']
+               for doc in text_data]  # Replace with your list of IDs
+    sentiment_query = {'_id': {'$in': id_list}}
+    sentiment_project = {'sentiment': 1, 'text': 1}
+    sentiment_data = list(sentiment_col.find(
+        sentiment_query, projection=sentiment_project))
+    print(len(sentiment_data))
+    sentiment_dicts = {doc['_id']: doc for doc in sentiment_data}
+
+    for doc in text_data:
+        doc['sentiment'] = sentiment_dicts[doc['_id']]['sentiment']
+        doc['text'] = sentiment_dicts[doc['_id']]['text']
+
+    return text_data
 
 
 if __name__ == "__main__":
@@ -259,24 +294,30 @@ if __name__ == "__main__":
     post_db_url = "mongodb+srv://colab:Hieu1234@hieubase.r9ivh.gcp.mongodb.net/?retryWrites=true&w=majority"
     comment_output_url = "mongodb+srv://dxn183:P4TnUn0wuNZqztQx@cluster0.7tqovhs.mongodb.net/"
 
-    from datetime import datetime, timedelta
-
-    collection = db.get_collection_by_url(url=comment_output_url, db_name="reddit_data", collection_name="interval_sentiment_1_day")
+    # collection = db.get_collection_by_url(url=comment_output_url, db_name="reddit_data", collection_name="interval_sentiment_1_day")
 
     epoch_seconds = 1659312000  # Replace with your specific date in epoch seconds format
-    start_time = datetime.utcfromtimestamp(epoch_seconds) - timedelta(days=1)
-    end_time = datetime.utcfromtimestamp(epoch_seconds)
+    start_time = (datetime.utcfromtimestamp(
+        epoch_seconds) - timedelta(days=366)).timestamp()
+    end_time = (datetime.utcfromtimestamp(epoch_seconds)).timestamp()
 
     query = {
-        'timestamp': {
+        'created_utc': {
             '$gte': start_time,
             '$lt': end_time
         }
     }
 
-    results = collection.find(query)
+    data = query_collections_join_by_id(query, post_db_url, post_db_url)
 
-    
+    company_sentiment = get_sentiment_by_organization([doc['text'] for doc in data],
+                                                      [doc['sentiment']
+                                                          for doc in data],
+                                                      ner.ner_company_from_text)
+
+    output_db = db.get_collection_by_url(
+        url=comment_output_url, db_name="reddit_data", collection_name="company_sentiment_interval")
+    output_db.insert_many(company_sentiment.values())
 
     # print("Loading sentiment analysis pipeline...")
     # # Connect to MongoDB

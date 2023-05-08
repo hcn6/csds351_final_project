@@ -1,8 +1,12 @@
 import spacy
 
-nlp = spacy.load("en_core_web_sm")
+nlp = spacy.load("en_core_web_trf")
+
+def lower_case(text):
+    return text.lower()
 
 def ner_company_from_text(text):
+    text = lower_case(text)
     doc = nlp(text)
     orgs = {}
     for ent in doc.ents:
