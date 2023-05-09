@@ -23,19 +23,27 @@ def ner_company_from_text(text, transformer=True):
     else:
         doc = nlp(text)
 
+    if transformer and len(doc) > nlp.max_length:
+        doc = doc[:nlp.max_length]
+
     orgs = {}
     for ent in doc.ents:
         if ent.label_ == 'ORG':
             orgs[ent.text] = 1 if ent.text not in orgs else orgs[ent.text] + 1
     return set(orgs.keys())
 
-def ner_company_from_texts(texts, transformer=True):
+def ner_company_from_many_texts(texts):
     orgs = {}
-    for text in texts:
-        orgs_in_text = ner_company_from_text(text, transformer)
-        for org in orgs_in_text:
-            orgs[org] = 1 if org not in orgs else orgs[org] + 1
+    for doc in transformer_nlp.pipe(texts, batch_size=64):
+        for ent in doc.ents:
+            if ent.label_ == 'ORG':
+                orgs[ent.text] = 1 if ent.text not in orgs else orgs[ent.text] + 1
     return set(orgs.keys())
+    # for text in texts:
+    #     orgs_in_text = ner_company_from_text(text, transformer)
+    #     for org in orgs_in_text:
+    #         orgs[org] = 1 if org not in orgs else orgs[org] + 1
+    # return set(orgs.keys())
 
 
 if __name__ == "__main__":
@@ -43,30 +51,38 @@ if __name__ == "__main__":
     post_db_url = "mongodb+srv://colab:Hieu1234@hieubase.r9ivh.gcp.mongodb.net/?retryWrites=true&w=majority"
     comment_output_url = "mongodb+srv://dxn183:P4TnUn0wuNZqztQx@cluster0.7tqovhs.mongodb.net/"
 
-    data_collection = db.get_collection_by_url(url=comment_db_url, db_name='reddit_data', collection_name='reddit_comment_praw')
-    # output_collection = db.get_collection_by_url(url=comment_output_url, db_name='reddit_data', collection_name='reddit_post_ner')
-    output_collection = db.get_collection_by_url(url=comment_output_url, db_name='reddit_data', collection_name='reddit_comment_ner')
+    data_collection = db.get_collection_by_url(url=post_db_url, db_name='reddit_data', collection_name='reddit_post')
+    output_collection = db.get_collection_by_url(url=comment_output_url, db_name='reddit_data', collection_name='reddit_post_ner')
+    # data_collection = db.get_collection_by_url(url=comment_db_url, db_name='reddit_data', collection_name='reddit_comment_praw')
+    # output_collection = db.get_collection_by_url(url=comment_output_url, db_name='reddit_data', collection_name='reddit_comment_ner')
 
     print("Querying data...")
     # Loop over the documents in the source collection and insert them into the destination collection
     all_data = list(data_collection.find({}))
 
-    data_for_insert = []
+    chunk_size = 10000
+    chunks = []
+    for i in range(0, len(all_data), chunk_size):
+        chunk = all_data[i:i+chunk_size]
+        chunks.append(chunk)
+    
     pbar = tqdm(total=len(all_data))
+    pbar2 = tqdm(total=len(chunks))
 
     print("Total data: ", len(all_data))
 
-    for data in all_data:
-        orgs = ner_company_from_text(data['body'])
-        data_for_insert.append({
-            '_id': data['_id'],
-            'orgs': list(orgs)
-        })
-        pbar.update(1)
+    for chunk in chunks:
+        data_for_insert = []
+        for data in chunk:
+            orgs = ner_company_from_many_texts(data['selftext'])
+            data_for_insert.append({
+                '_id': data['_id'],
+                'orgs': list(orgs)
+            })
+            pbar.update(1)
+        output_collection.insert_many(data_for_insert)
+        pbar2.update(1)
     pbar.close()
-
-    print("Inserting data...")
-    output_collection.insert_many(data_for_insert)
-
+    pbar2.close()
 
     
