@@ -33,12 +33,14 @@ def ner_company_from_text(text, transformer=True):
     return set(orgs.keys())
 
 def ner_company_from_many_texts(texts):
-    orgs = {}
+    orgs_list = []
     for doc in transformer_nlp.pipe(texts, batch_size=64):
+        orgs = {}
         for ent in doc.ents:
             if ent.label_ == 'ORG':
                 orgs[ent.text] = 1 if ent.text not in orgs else orgs[ent.text] + 1
-    return set(orgs.keys())
+        orgs_list.append(list(orgs.keys()))
+    return orgs_list
     # for text in texts:
     #     orgs_in_text = ner_company_from_text(text, transformer)
     #     for org in orgs_in_text:
@@ -73,16 +75,21 @@ if __name__ == "__main__":
 
     for chunk in chunks:
         data_for_insert = []
-        for data in chunk:
-            orgs = ner_company_from_many_texts(data['selftext'])
+
+        orgs_list = ner_company_from_many_texts([data['selftext'] for data in chunk])
+        for org, data in zip(orgs_list, chunk):
             data_for_insert.append({
                 '_id': data['_id'],
-                'orgs': list(orgs)
+                'orgs': org
             })
             pbar.update(1)
+        # for data in chunk:
+        #     orgs = ner_company_from_many_texts(data['selftext'])
+        #     data_for_insert.append({
+        #         '_id': data['_id'],
+        #         'orgs': list(orgs)
+        #     })
         output_collection.insert_many(data_for_insert)
-        pbar2.update(1)
     pbar.close()
-    pbar2.close()
 
     
