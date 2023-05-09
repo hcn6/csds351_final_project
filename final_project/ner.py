@@ -43,8 +43,9 @@ if __name__ == "__main__":
     post_db_url = "mongodb+srv://colab:Hieu1234@hieubase.r9ivh.gcp.mongodb.net/?retryWrites=true&w=majority"
     comment_output_url = "mongodb+srv://dxn183:P4TnUn0wuNZqztQx@cluster0.7tqovhs.mongodb.net/"
 
-    data_collection = db.get_collection_by_url(url=post_db_url, db_name='reddit_data', collection_name='reddit_post')
-    output_collection = db.get_collection_by_url(url=comment_output_url, db_name='reddit_data', collection_name='reddit_post_ner')
+    data_collection = db.get_collection_by_url(url=comment_db_url, db_name='reddit_data', collection_name='reddit_comment_praw')
+    # output_collection = db.get_collection_by_url(url=comment_output_url, db_name='reddit_data', collection_name='reddit_post_ner')
+    output_collection = db.get_collection_by_url(url=comment_output_url, db_name='reddit_data', collection_name='reddit_comment_ner')
 
     print("Querying data...")
     # Loop over the documents in the source collection and insert them into the destination collection
@@ -54,9 +55,9 @@ if __name__ == "__main__":
     pbar = tqdm(total=len(all_data))
 
     print("Total data: ", len(all_data))
-    
+
     for data in all_data:
-        orgs = ner_company_from_text(data['selftext'])
+        orgs = ner_company_from_text(data['body'])
         data_for_insert.append({
             '_id': data['_id'],
             'orgs': list(orgs)
