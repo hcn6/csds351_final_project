@@ -1,6 +1,7 @@
 import spacy
 from thinc.api import set_gpu_allocator, require_gpu
-
+from database import db
+from tqdm import tqdm
 # Use the GPU, with memory allocations directed via PyTorch.
 # This prevents out-of-memory errors that would otherwise occur from competing
 # memory pools.
@@ -27,3 +28,44 @@ def ner_company_from_text(text, transformer=True):
         if ent.label_ == 'ORG':
             orgs[ent.text] = 1 if ent.text not in orgs else orgs[ent.text] + 1
     return set(orgs.keys())
+
+def ner_company_from_texts(texts, transformer=True):
+    orgs = {}
+    for text in texts:
+        orgs_in_text = ner_company_from_text(text, transformer)
+        for org in orgs_in_text:
+            orgs[org] = 1 if org not in orgs else orgs[org] + 1
+    return set(orgs.keys())
+
+
+if __name__ == "__main__":
+    comment_db_url = "mongodb+srv://dxn183:NBq4c7oQaFm7kaOD@cluster1.ylkmwu2.mongodb.net/"
+    post_db_url = "mongodb+srv://colab:Hieu1234@hieubase.r9ivh.gcp.mongodb.net/?retryWrites=true&w=majority"
+    comment_output_url = "mongodb+srv://dxn183:P4TnUn0wuNZqztQx@cluster0.7tqovhs.mongodb.net/"
+
+    data_collection = db.get_collection_by_url(url=post_db_url, db_name='reddit_data', collection_name='reddit_post')
+    output_collection = db.get_collection_by_url(url=comment_output_url, db_name='reddit_data', collection_name='reddit_post_ner')
+
+    print("Querying data...")
+    # Loop over the documents in the source collection and insert them into the destination collection
+    all_data = list(data_collection.find({}))
+
+    data_for_insert = []
+    pbar = tqdm(total=len(all_data))
+
+    print("Total data: ", len(all_data))
+    
+    for data in all_data:
+        orgs = ner_company_from_text(data['selftext'])
+        data_for_insert.append({
+            '_id': data['_id'],
+            'orgs': list(orgs)
+        })
+        pbar.update(1)
+    pbar.close()
+
+    print("Inserting data...")
+    output_collection.insert_many(data_for_insert)
+
+
+    
