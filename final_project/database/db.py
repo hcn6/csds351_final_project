@@ -32,13 +32,13 @@ if __name__ == '__main__':
     from pymongo import MongoClient
 
     # Connect to the source and destination databases
-    source_client = MongoClient('mongodb+srv://dxn183:NBq4c7oQaFm7kaOD@cluster1.ylkmwu2.mongodb.net/')
+    source_client = MongoClient('localhost:27017')
     source_db = source_client['reddit_data']
-    source_collection = source_db['reddit_comment_sentiment_score']
+    source_collection = source_db['reddit_comment_praw']
 
-    dest_client = MongoClient('mongodb+srv://dxn183:P4TnUn0wuNZqztQx@cluster0.7tqovhs.mongodb.net/')
+    dest_client = MongoClient('mongodb+srv://dxn183:NBq4c7oQaFm7kaOD@cluster1.ylkmwu2.mongodb.net/')
     dest_db = dest_client['reddit_data']
-    dest_collection = dest_db['reddit_comment_sentiment_score']
+    dest_collection = dest_db['reddit_comment_praw']
 
     # Loop over the documents in the source collection and insert them into the destination collection
     count = 0
@@ -47,11 +47,16 @@ if __name__ == '__main__':
     batch_docs = []
     # batch_size = 2000
     # query = {"created_utc": {"$lt": 1659312000}, "author": {"$ne": "AutoModerator"}}
+    print("Querying...")
     query = {}
     all_data = list(source_collection.find(query))
 
-    # for data in all_data:
-    #     data.pop('body_html', None)
+    all_data = [x for x in all_data if x['_id'] not in inserted]
+
+    for data in all_data:
+        data.pop('body_html', None)
+
+    print("Migrating...")
 
     chunk_size = 10000
     chunks = []
@@ -62,7 +67,7 @@ if __name__ == '__main__':
     pbar = tqdm(total=len(chunks))
     for chunk in chunks:
         count += len(chunk)
-        if count % 10000 == 0:
+        if count % chunk_size == 0:
             logging.info(f"Finish upload {count} comments")
         
         # if document['_id'] not in inserted:

@@ -86,7 +86,7 @@ if __name__ == "__main__":
     db = client["reddit_data"]
 
     # Access a specific collection in the database
-    collection = db["reddit_comment_praw"]
+    collection = db["reddit_post"]
 
     # Let cut-off point be 1588291200 (May 1, 2020 12:00:00 AM GMT)
     # From the cut-off point, looping through the database and send the data to Kafka
@@ -111,11 +111,12 @@ if __name__ == "__main__":
     wait_until(start_time)
 
     for doc in results:
+        print(doc)
         posted_time = doc["created_utc"]
         wait_until(posted_time, cur_time)
         print(posted_time)
         data = {
-            "message": doc["body"],
+            "message": doc["selftext"],
             "created_utc": str(datetime.fromtimestamp(posted_time)),
         }
         publish_message(kafka_producer, 'reddit_posts',
