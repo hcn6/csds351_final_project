@@ -9,8 +9,6 @@ require_gpu(0)
 
 # load the model and specify the device ID of the GPU to use
 nlp = spacy.load('en_core_web_trf', exclude=['parser', 'tagger', 'lemmatizer'])
-nlp.select_pipes(enable=["transformer"])
-nlp.config["gpu_id"] = 0  # set the device ID of the GPU to use
 
 def lower_case(text):
     return text.lower()
