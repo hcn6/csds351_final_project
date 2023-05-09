@@ -8,14 +8,20 @@ set_gpu_allocator("pytorch")
 require_gpu(0)
 
 # load the model and specify the device ID of the GPU to use
-nlp = spacy.load('en_core_web_trf', exclude=['parser', 'tagger', 'lemmatizer'])
+transformer_nlp = spacy.load('en_core_web_trf')
+nlp = spacy.load('en_core_web_sm')
 
 def lower_case(text):
     return text.lower()
 
-def ner_company_from_text(text):
+def ner_company_from_text(text, transformer=True):
     text = lower_case(text)
-    doc = nlp(text)
+    doc = None
+    if transformer:
+        doc = transformer_nlp(text)
+    else:
+        doc = nlp(text)
+
     orgs = {}
     for ent in doc.ents:
         if ent.label_ == 'ORG':
