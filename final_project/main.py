@@ -260,14 +260,45 @@ def get_sentiment_by_organization(texts, sentiment_scores, get_organizations_fn)
 
     return avg_sentiments
 
+def get_sentiment_by_organization_existed(texts, sentiment_scores, orgs_list):
+    org_sentiments = defaultdict(lambda: defaultdict(int))
+    org_counts = defaultdict(int)
 
-def query_collections_join_by_id(query, text_col_url, sentiment_col_url):
+    pbar = tqdm(total=len(texts))
+
+    for i, text in enumerate(texts):
+        organizations = orgs_list[i]
+        sentiment = sentiment_scores[i]
+        for org in organizations:
+            org_sentiments[org]['positive'] += sentiment['positive']
+            org_sentiments[org]['negative'] += sentiment['negative']
+            org_sentiments[org]['neutral'] += sentiment['neutral']
+            org_counts[org] += 1
+        pbar.update(1)
+    pbar.close()
+
+    avg_sentiments = {}
+    for org, sentiment_totals in org_sentiments.items():
+        avg_sentiments[org] = {
+            'company': org,
+            'positive': sentiment_totals['positive'] / org_counts[org],
+            'negative': sentiment_totals['negative'] / org_counts[org],
+            'neutral': sentiment_totals['neutral'] / org_counts[org],
+            'count': org_counts[org]
+        }
+
+    return avg_sentiments
+
+def query_collections_join_by_id(query, text_col_url, sentiment_col_url, ner_col_url):
+    ner_col = db.get_collection_by_url(url=ner_col_url,
+                                       db_name="reddit_data",
+                                       collection_name="reddit_post_ner")
     text_col = db.get_collection_by_url(url=text_col_url,
                                         db_name="reddit_data",
-                                        collection_name="reddit_post")  # Replace with your first collection name
+                                        collection_name="reddit_post")
     sentiment_col = db.get_collection_by_url(url=sentiment_col_url,
                                              db_name="reddit_data",
-                                             collection_name="reddit_sentiment_score")  # Replace with your second collection name
+                                             collection_name="reddit_sentiment_score")
 
     text_project = {'created_utc': 1}
     text_data = list(text_col.find(query, projection=text_project))
@@ -275,6 +306,7 @@ def query_collections_join_by_id(query, text_col_url, sentiment_col_url):
     print(len(text_data))
     id_list = [doc['_id']
                for doc in text_data]  # Replace with your list of IDs
+    
     sentiment_query = {'_id': {'$in': id_list}}
     sentiment_project = {'sentiment': 1, 'text': 1}
     sentiment_data = list(sentiment_col.find(
@@ -282,9 +314,15 @@ def query_collections_join_by_id(query, text_col_url, sentiment_col_url):
     print(len(sentiment_data))
     sentiment_dicts = {doc['_id']: doc for doc in sentiment_data}
 
+    ner_query = {'_id': {'$in': id_list}}
+    ner_data = list(ner_col.find(ner_query))
+    print(len(ner_data))
+    ner_dicts = {doc['_id']: doc for doc in ner_data}
+
     for doc in text_data:
         doc['sentiment'] = sentiment_dicts[doc['_id']]['sentiment']
         doc['text'] = sentiment_dicts[doc['_id']]['text']
+        doc['orgs'] = ner_dicts[doc['_id']]['orgs']
 
     return text_data
 
@@ -308,15 +346,18 @@ if __name__ == "__main__":
         }
     }
 
-    data = query_collections_join_by_id(query, post_db_url, post_db_url)
+    data = query_collections_join_by_id(query, 
+                                        text_col_url=post_db_url, 
+                                        sentiment_col_url=post_db_url, 
+                                        ner_col_url=comment_output_url)
 
-    company_sentiment = get_sentiment_by_organization([doc['text'] for doc in data],
+    company_sentiment = get_sentiment_by_organization_existed([doc['text'] for doc in data],
                                                       [doc['sentiment']
                                                           for doc in data],
-                                                      ner.ner_company_from_text)
+                                                      [doc['orgs'] for doc in data])
 
     output_db = db.get_collection_by_url(
-        url=comment_output_url, db_name="reddit_data", collection_name="company_sentiment_interval")
+        url=comment_output_url, db_name="reddit_data", collection_name="company_sentiment_interval_2")
     output_db.insert_many(company_sentiment.values())
 
     # print("Loading sentiment analysis pipeline...")

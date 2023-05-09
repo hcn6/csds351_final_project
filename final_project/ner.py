@@ -32,9 +32,11 @@ def ner_company_from_text(text, transformer=True):
             orgs[ent.text] = 1 if ent.text not in orgs else orgs[ent.text] + 1
     return set(orgs.keys())
 
-def ner_company_from_many_texts(texts):
+def ner_company_from_many_texts(texts, batch_size=128):
+    texts = [lower_case(text) for text in texts]
+    
     orgs_list = []
-    for doc in transformer_nlp.pipe(texts, batch_size=64):
+    for doc in transformer_nlp.pipe(texts, batch_size=batch_size):
         orgs = {}
         for ent in doc.ents:
             if ent.label_ == 'ORG':
