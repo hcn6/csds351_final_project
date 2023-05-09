@@ -11,6 +11,7 @@ DATABASE_NAME = 'reddit_data'
 
 client = MongoClient(MONGO_ENDPOINT, MONGO_PORT)
 
+
 def get_collection(collection_name, db_name=DATABASE_NAME):
     current_client = client
     current_db = current_client[db_name]
@@ -48,7 +49,7 @@ if __name__ == '__main__':
     # batch_size = 2000
     # query = {"created_utc": {"$lt": 1659312000}, "author": {"$ne": "AutoModerator"}}
     print("Querying...")
-    query = {}
+    query = {"author": {"$ne": "AutoModerator"}}
     all_data = list(source_collection.find(query))
 
     all_data = [x for x in all_data if x['_id'] not in inserted]

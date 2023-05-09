@@ -1,5 +1,10 @@
 setup.py
 final_project/__init__.py
+final_project/main.py
+final_project/main_ner.py
+final_project/mapreduce.py
+final_project/ner.py
+final_project/os.py
 final_project/utils.py
 final_project.egg-info/PKG-INFO
 final_project.egg-info/SOURCES.txt
@@ -7,11 +12,16 @@ final_project.egg-info/dependency_links.txt
 final_project.egg-info/top_level.txt
 final_project/analysis/__init__.py
 final_project/analysis/analysis.py
+final_project/analysis/preprocess.py
 final_project/clean_text/__init__.py
 final_project/clean_text/reddit_clean_text.py
 final_project/clean_text/twitter_clean_text.py
 final_project/crawler/__init__.py
+final_project/crawler/all_reddit_comments.py
+final_project/crawler/all_reddit_posts.py
 final_project/crawler/crawl_twitter.py
+final_project/crawler/fake_kafka_producer.py
+final_project/crawler/praw_reddit_comment.py
 final_project/crawler/reddit_consumer.py
 final_project/crawler/reddit_producer.py
 final_project/crawler/stream_reddit.py

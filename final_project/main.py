@@ -17,6 +17,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from tqdm import tqdm
 import pytz
+
 nltk.download('punkt')
 nltk.download('stopwords')
 
@@ -163,6 +164,8 @@ def sentiment_layer(sentiment, comments):
     comments = [convert_json_string_to_dict(
         comment.value) for comment in comments]
     sentiment.tweet_sentiment_and_insert_db(comments)
+
+
 # def mapping_sentiment_to_company(sentiments, companies):
 
 
@@ -188,10 +191,11 @@ def average_sentiment_score(list_of_dicts):
 
     return averages_dict
 
+
 def kafka_batch_analysis(texts, sentiment):
     results = sentiment.tweet_sentiment(texts)
     ners = [ner.ner_company_from_text(text) for text in texts]
-    
+
     merged_company_set = merge_dict_keys(ners)
 
     merged_company_dict = {}
@@ -231,10 +235,12 @@ def mongodb_batch_sentiment(analysis, texts):
 
     return all_scores
 
+
 def calculate_normalize_score(score_dict, count):
     score = (score_dict['positive'] / count) - (score_dict['negative'] / count)
     normalize_score = (score + 1) / 2
     return normalize_score
+
 
 def get_sentiment_by_organization(texts, sentiment_scores, get_organizations_fn):
     org_sentiments = defaultdict(lambda: defaultdict(int))
@@ -266,6 +272,7 @@ def get_sentiment_by_organization(texts, sentiment_scores, get_organizations_fn)
 
     return avg_sentiments
 
+
 def get_sentiment_by_organization_existed(texts, sentiment_scores, orgs_list):
     org_sentiments = defaultdict(lambda: defaultdict(int))
     org_counts = defaultdict(int)
@@ -296,6 +303,7 @@ def get_sentiment_by_organization_existed(texts, sentiment_scores, orgs_list):
 
     return avg_sentiments
 
+
 def query_collections_join_by_id(query, text_col_url, sentiment_col_url, ner_col_url):
     ner_col = db.get_collection_by_url(url=ner_col_url,
                                        db_name="reddit_data",
@@ -313,7 +321,7 @@ def query_collections_join_by_id(query, text_col_url, sentiment_col_url, ner_col
     print(len(text_data))
     id_list = [doc['_id']
                for doc in text_data]  # Replace with your list of IDs
-    
+
     sentiment_query = {'_id': {'$in': id_list}}
     sentiment_project = {'sentiment': 1, 'text': 1}
     sentiment_data = list(sentiment_col.find(
@@ -335,7 +343,9 @@ def query_collections_join_by_id(query, text_col_url, sentiment_col_url, ner_col
 
     return text_data
 
-def analyze_sentiment_by_company_by_interval(utc_start_date, interval_by_days, text_col_url, sentiment_col_url, ner_col_url):
+
+def analyze_sentiment_by_company_by_interval(utc_start_date, interval_by_days, text_col_url, sentiment_col_url,
+                                             ner_col_url):
     start_time = (utc_start_date - timedelta(days=interval_by_days)).timestamp()
     end_time = utc_start_date.timestamp()
     print(end_time)
@@ -351,23 +361,30 @@ def analyze_sentiment_by_company_by_interval(utc_start_date, interval_by_days, t
     avg_sentiments = get_sentiment_by_organization_existed(texts, sentiment_scores, orgs_list)
     return avg_sentiments
 
+
 if __name__ == "__main__":
     comment_db_url = "mongodb+srv://dxn183:NBq4c7oQaFm7kaOD@cluster1.ylkmwu2.mongodb.net/"
     post_db_url = "mongodb+srv://colab:Hieu1234@hieubase.r9ivh.gcp.mongodb.net/?retryWrites=true&w=majority"
     analysis_url = "mongodb+srv://dxn183:P4TnUn0wuNZqztQx@cluster0.7tqovhs.mongodb.net/"
+    from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
+
+    print("Loading sentiment analysis pipeline...")
+    # Connect to MongoDB
+    data_collection = db.get_collection("reddit_comment_praw")
+    analysis_log = db.get_collection("reddit_comment_sentiment_analysis_log")
+    output_collection = db.get_collection("reddit_comment_sentiment_score")
 
     utc_start_date = datetime(2022, 8, 1, 0, 0, 0, tzinfo=timezone.utc)
 
-    company_sentiment_by_interval = analyze_sentiment_by_company_by_interval(utc_start_date=utc_start_date, 
-                                             interval_by_days=10000, 
-                                             text_col_url=post_db_url, 
-                                             sentiment_col_url=post_db_url, 
-                                             ner_col_url=analysis_url)
+    company_sentiment_by_interval = analyze_sentiment_by_company_by_interval(utc_start_date=utc_start_date,
+                                                                             interval_by_days=10000,
+                                                                             text_col_url=post_db_url,
+                                                                             sentiment_col_url=post_db_url,
+                                                                             ner_col_url=analysis_url)
 
     output_db = db.get_collection_by_url(
         url=analysis_url, db_name="reddit_data", collection_name="company_sentiment_interval")
     output_db.insert_many(company_sentiment_by_interval.values())
-
 
     # print("Loading sentiment analysis pipeline...")
     # # Connect to MongoDB
@@ -431,7 +448,6 @@ if __name__ == "__main__":
     #     print(f"Processed {i * db_batch_size} documents.")
     #     print(f"Batch {i} took {time.time() - start} seconds.")
     #     time.sleep(5)
-
 
 # 01-08-2022 -> past
 # read by hours -> output to json, with timestamp as key

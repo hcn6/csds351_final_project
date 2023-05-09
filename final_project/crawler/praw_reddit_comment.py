@@ -3,6 +3,7 @@ from final_project.database import db
 from final_project.utils import logging
 import pprint
 
+
 def preprocess_comment_dict(my_dict):
     my_dict = {k: v for k, v in my_dict.items() if not k.startswith('_')}
     try:
@@ -11,6 +12,7 @@ def preprocess_comment_dict(my_dict):
     except Exception as e:
         return None
     return my_dict
+
 
 def crawl_comment_one_post(post_id: str, total_comment: int):
     reddit = praw.Reddit('bot1')
@@ -28,6 +30,7 @@ def crawl_comment_one_post(post_id: str, total_comment: int):
 
         count += 1
     logging.info(f"Total comments crawled: {count} Total comments in post: {total_comment}")
+
 
 if __name__ == '__main__':
     count = 8688
