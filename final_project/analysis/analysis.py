@@ -5,7 +5,7 @@ import torch
 import csv
 # from final_project.database import db
 # from preprocess import preprocess_string
-from clean_text.twitter_clean_text import preprocess_string
+from final_project.clean_text.twitter_clean_text import preprocess_string
 from transformers import AutoModelForSequenceClassification
 from transformers import AutoTokenizer
 import pprint
@@ -69,14 +69,15 @@ class Analysis:
         return self.cal_stat_for_collection_with_labels(tokenizer, tweets, model)
 
     def get_label_for_task(self, task):
-        labels = []
-        mapping_link = f"analysis/mapping/{task}/mapping.txt"
-        with open(mapping_link, 'r', encoding='utf-8') as f:
-            html = f.read().split("\n")
-            csvreader = csv.reader(html, delimiter='\t')
-
-        labels = [row[1] for row in csvreader if len(row) > 1]
-        return labels
+        # labels = []
+        # mapping_link = f"analysis/mapping/{task}/mapping.txt"
+        # with open(mapping_link, 'r', encoding='utf-8') as f:
+        #     html = f.read().split("\n")
+        #     csvreader = csv.reader(html, delimiter='\t')
+        #
+        # labels = [row[1] for row in csvreader if len(row) > 1]
+        # return labels
+        return ['negative', 'neutral', 'positive']
 
     def preprocess_tweets(self, tweets):
         tweets = [preprocess_string(tweet) for tweet in tweets]

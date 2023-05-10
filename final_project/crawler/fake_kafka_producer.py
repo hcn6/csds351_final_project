@@ -34,7 +34,7 @@ def send_message(topic, message):
 # periodically based on created_utc
 
 
-cut_off_point = datetime(2020, 12, 21, 0, 0, 0).timestamp()
+cut_off_point = datetime(2022, 8, 1, 0, 0, 0).timestamp()
 start_time = datetime(2023, 5, 9, 18, 35, 0).timestamp()
 
 
@@ -51,13 +51,6 @@ def wait_until(next_time, cut_off_time=None, speed_up=1):
 
 pipeline = [
     {"$match": {"created_utc": {"$gt": cut_off_point}}},
-    {"$project": {
-        "_id": 1,
-        "created_utc": 1,
-        "id": 1,
-        "body": 1,
-        "author": 1,
-    }},
     {"$sort": {"created_utc": 1}}
 ]
 
@@ -71,12 +64,14 @@ print("Start sending messages")
 
 for doc in results:
     posted_time = doc["created_utc"]
-    wait_until(posted_time, cut_off_time=cur_time, speed_up=60)
+    wait_until(posted_time, cut_off_time=cur_time, speed_up=6)
     print(posted_time)
     send_message('reddit-posts-2', {
+        "author_fullname": doc["author_fullname"],
+        "author": doc["author"],
+        "link_id": doc["link_id"],
+        "parent_id": doc["parent_id"],
         "body": doc["body"],
         "created_utc": doc["created_utc"],
-        "author": doc["author"],
-        "id": doc["id"]
     })
     cur_time = posted_time

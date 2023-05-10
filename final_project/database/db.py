@@ -33,11 +33,11 @@ if __name__ == '__main__':
     from pymongo import MongoClient
 
     # Connect to the source and destination databases
-    source_client = MongoClient('localhost:27017')
+    source_client = MongoClient('mongodb+srv://dxn183:NBq4c7oQaFm7kaOD@cluster1.ylkmwu2.mongodb.net/')
     source_db = source_client['reddit_data']
     source_collection = source_db['reddit_comment_praw']
 
-    dest_client = MongoClient('mongodb+srv://dxn183:NBq4c7oQaFm7kaOD@cluster1.ylkmwu2.mongodb.net/')
+    dest_client = MongoClient('localhost', 27017)
     dest_db = dest_client['reddit_data']
     dest_collection = dest_db['reddit_comment_praw']
 
