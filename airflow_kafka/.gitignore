@@ -1,0 +1,49 @@
+# .gitignore
+
+# Ignore Airflow logs
+logs/
+
+# Ignore temporary files
+*.pyc
+*~
+.#*
+__pycache__/
+
+# Ignore eggs
+*.egg
+*.egg-info/
+dist/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+*.bak
+
+# Ignore local configuration files
+airflow.cfg
+unittests.cfg
+
+# Ignore SQLite database files
+*.db
+
+# Ignore Jupyter Notebook files
+.ipynb_checkpoints
+*.ipynb
+
+# Ignore environment and Python distribution files
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+
+# Ignore website files
+airflow-webserver.pid
+airflow-webserver.pid.lock
+
+# Ignore webserver files
+webserver_config.py
