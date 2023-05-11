@@ -28,6 +28,9 @@ def get_collection_by_url(url, db_name, collection_name, port=MONGO_PORT):
     collection = current_db[collection_name]
     return collection
 
+def get_need_fields_from_obj(obj, fields):
+    return {field: obj[field] for field in fields}
+
 if __name__ == '__main__':
     from pymongo import MongoClient
 
@@ -40,17 +43,19 @@ if __name__ == '__main__':
     dest_db = dest_client['reddit_data']
     dest_collection = dest_db['reddit_comment_praw']
 
+    fields = ["author", "author_fullname", "body", "_id", "parent_id", "link_id", "created_utc"]
     # Loop over the documents in the source collection and insert them into the destination collection
     count = 0
     inserted = set(x['_id'] for x in dest_collection.find())
 
-    batch_docs = []
     # batch_size = 2000
     # query = {"created_utc": {"$lt": 1659312000}, "author": {"$ne": "AutoModerator"}}
     print("Querying...")
     query = {}
     all_data = list(source_collection.find(query))
 
+    all_data = [get_need_fields_from_obj(x, fields) for x in all_data]
+    
     all_data = [x for x in all_data if x['_id'] not in inserted]
 
     for data in all_data:

@@ -191,7 +191,7 @@ def average_sentiment_score(list_of_dicts):
 def kafka_batch_analysis(texts, sentiment):
     results = sentiment.tweet_sentiment(texts)
     ners = [ner.ner_company_from_text(text) for text in texts]
-    
+
     merged_company_set = merge_dict_keys(ners)
 
     merged_company_dict = {}
@@ -235,6 +235,14 @@ def calculate_normalize_score(score_dict, count):
     score = (score_dict['positive'] / count) - (score_dict['negative'] / count)
     normalize_score = (score + 1) / 2
     return normalize_score
+
+def get_comments_by_post_id(post_id, comment_col_url):
+    comment_col = db.get_collection_by_url(url=comment_col_url,
+                                           db_name="reddit_data",
+                                           collection_name="reddit_comment_praw")
+    query = {"link_id": {"$regex": post_id}}
+    comments = list(comment_col.find(query))
+    return comments
 
 def get_sentiment_by_organization(texts, sentiment_scores, get_organizations_fn):
     org_sentiments = defaultdict(lambda: defaultdict(int))
@@ -307,10 +315,12 @@ def query_collections_join_by_id(query, text_col_url, sentiment_col_url, ner_col
                                              db_name="reddit_data",
                                              collection_name="reddit_sentiment_score")
 
-    text_project = {'created_utc': 1}
+    text_project = {'created_utc': 1, 'id': 1}
     text_data = list(text_col.find(query, projection=text_project))
 
-    print(len(text_data))
+    if text_data == []:
+        return []
+    # print(len(text_data))
     id_list = [doc['_id']
                for doc in text_data]  # Replace with your list of IDs
     
@@ -318,12 +328,12 @@ def query_collections_join_by_id(query, text_col_url, sentiment_col_url, ner_col
     sentiment_project = {'sentiment': 1, 'text': 1}
     sentiment_data = list(sentiment_col.find(
         sentiment_query, projection=sentiment_project))
-    print(len(sentiment_data))
+    # print(len(sentiment_data))
     sentiment_dicts = {doc['_id']: doc for doc in sentiment_data}
 
     ner_query = {'_id': {'$in': id_list}}
     ner_data = list(ner_col.find(ner_query))
-    print(len(ner_data))
+    # print(len(ner_data))
     ner_dicts = {doc['_id']: doc for doc in ner_data}
 
     text_data = [doc for doc in text_data if doc['_id'] in sentiment_dicts and doc['_id'] in ner_dicts]
@@ -338,10 +348,14 @@ def query_collections_join_by_id(query, text_col_url, sentiment_col_url, ner_col
 def analyze_sentiment_by_company_by_interval(utc_start_date, interval_by_days, text_col_url, sentiment_col_url, ner_col_url):
     start_time = (utc_start_date - timedelta(days=interval_by_days)).timestamp()
     end_time = utc_start_date.timestamp()
-    print(end_time)
+    # print(end_time)
     query = {'created_utc': {'$gte': start_time, '$lt': end_time}}
 
     text_data = query_collections_join_by_id(query, text_col_url, sentiment_col_url, ner_col_url)
+
+    if text_data == []:
+        return {}
+    
     texts = [doc['text'] for doc in text_data]
 
     sentiment_scores = [doc['sentiment'] for doc in text_data]
@@ -356,17 +370,39 @@ if __name__ == "__main__":
     post_db_url = "mongodb+srv://colab:Hieu1234@hieubase.r9ivh.gcp.mongodb.net/?retryWrites=true&w=majority"
     analysis_url = "mongodb+srv://dxn183:P4TnUn0wuNZqztQx@cluster0.7tqovhs.mongodb.net/"
 
-    utc_start_date = datetime(2022, 8, 1, 0, 0, 0, tzinfo=timezone.utc)
+    utc_start_date = datetime(2023, 3, 1, 0, 0, 0, tzinfo=timezone.utc)
 
-    company_sentiment_by_interval = analyze_sentiment_by_company_by_interval(utc_start_date=utc_start_date, 
-                                             interval_by_days=10000, 
-                                             text_col_url=post_db_url, 
-                                             sentiment_col_url=post_db_url, 
-                                             ner_col_url=analysis_url)
+    # set the start date and end date
+    start_range = datetime(2019, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    end_range = datetime(2023, 5, 1, 0, 0, 0, tzinfo=timezone.utc)
 
-    output_db = db.get_collection_by_url(
-        url=analysis_url, db_name="reddit_data", collection_name="company_sentiment_interval")
-    output_db.insert_many(company_sentiment_by_interval.values())
+    # define a timedelta of 1 day
+    delta = timedelta(days=1)
+
+    pbar = tqdm(total=(end_range - start_range).days, leave=False)
+
+    for i in range((end_range - start_range).days):
+        utc_start_date = start_range + i * delta
+        print(utc_start_date)
+        company_sentiment_by_interval = analyze_sentiment_by_company_by_interval(utc_start_date=utc_start_date, 
+                                                interval_by_days=1, 
+                                                text_col_url=post_db_url, 
+                                                sentiment_col_url=post_db_url, 
+                                                ner_col_url=analysis_url)
+
+        if len(company_sentiment_by_interval) == 0:
+            pbar.update(1)
+            continue 
+
+        data_to_insert = [{**doc, 
+                           'utc_interval_date': utc_start_date, 
+                           'utc_timestamp': utc_start_date.timestamp() } 
+                           for doc in company_sentiment_by_interval.values()]
+
+        output_db = db.get_collection_by_url(
+            url=analysis_url, db_name="reddit_data", collection_name="company_sentiment_day_interval")
+        output_db.insert_many(data_to_insert)
+        pbar.update(1)
 
 
     # print("Loading sentiment analysis pipeline...")
